@@ -67,3 +67,8 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+
+**/results
+*/results
+2DFermiHubbard/results/
