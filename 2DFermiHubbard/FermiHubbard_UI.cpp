@@ -346,52 +346,65 @@ void ui::test_monomer_concentration()
     const auto& V = this->ptr_to_model->get_eigenvectors();
     std::cout << " - - - - - - finished diagonalization in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
     start = std::chrono::system_clock::now();
+    auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
 
     lattice::lattice2D _lattice(this->Lx, this->Ly, 1-this->boundary_conditions);
     elem_ty val;
-    u64 initial_state = 0;
-    int ellx = 0, elly = 0;
-    int nup = 0, nd = 0;
+    u64 initial_state = 0; //_hilbert_space(0);
+    int ell = 0;
 
-    // Create antiferromagnetic monomer initial state
-    for(int ell = 0; ell < this->L; ++ell)
-    {
-        int row = ell / this->Lx;
-        int col = ell % this->Lx;
-
-        if((row % 2) == 1 || (col % 2) == 1)
-            continue;
-
-        int block = col / 2;
-        bool first_pattern = (row % 4) == 0;
-
-        if(first_pattern)
-        {
-            if((block % 2) == 0 && (nup < this->syms.Nup))
-            {
-                std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
-                nup += 1;
-            }
-            else if((block % 2) == 1 && (nd < this->syms.Ndown))
-            {
-                std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
-                nd += 1;
-            }
-        }
-        else
-        {
-            if((block % 2) == 0 && (nd < this->syms.Ndown))
-            {
-                std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
-                nd += 1;
-            }
-            else if((block % 2) == 1 && (nup < this->syms.Nup))
-            {
-                std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
-                nup += 1;
-            }
-        }
+    // Create monomer initial state
+    for(int nu = 0 ; nu < this->syms.Nup; nu++){
+        std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
+        ell += 2;
+        if( (ell  / this->Lx) % 2)
+            ell += this->Lx;
     }
+    for(int nd = 0 ; nd < this->syms.Ndown; nd++){
+        std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
+        ell += 2;
+        if( (ell  / this->Lx) % 2)
+            ell += this->Lx;
+    }
+    // Create antiferromagnetic monomer initial state
+    // for(int ell = 0; ell < this->L; ++ell)
+    // {
+    //     int row = ell / this->Lx;
+    //     int col = ell % this->Lx;
+
+    //     if((row % 2) == 1 || (col % 2) == 1)
+    //         continue;
+
+    //     int block = col / 2;
+    //     bool first_pattern = (row % 4) == 0;
+
+    //     if(first_pattern)
+    //     {
+    //         if((block % 2) == 0 && (nup < this->syms.Nup))
+    //         {
+    //             std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
+    //             nup += 1;
+    //         }
+    //         else if((block % 2) == 1 && (nd < this->syms.Ndown))
+    //         {
+    //             std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
+    //             nd += 1;
+    //         }
+    //     }
+    //     else
+    //     {
+    //         if((block % 2) == 0 && (nd < this->syms.Ndown))
+    //         {
+    //             std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
+    //             nd += 1;
+    //         }
+    //         else if((block % 2) == 1 && (nup < this->syms.Nup))
+    //         {
+    //             std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
+    //             nup += 1;
+    //         }
+    //     }
+    // }
     auto check_spin = QOps::__builtins::get_digit(this->L);
 
     arma::mat state_in_lattice(this->Ly, this->Lx, arma::fill::zeros);
@@ -403,7 +416,6 @@ void ui::test_monomer_concentration()
         // printSeparated(std::cout, "\t", 20, true, state, j, xcoord, ycoord, n_particle);
         state_in_lattice(ycoord, xcoord) = _fermion_number(n_particle);
     }
-    auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
     u64 index = _hilbert_space.find(initial_state);
     std::cout << initial_state << "\t" << index << "\t" << boost::dynamic_bitset<>(2*this->L, initial_state) << "\n" << state_in_lattice << std::endl << std::endl;
     arma::Col<element_type> coeff = V.row(index).t();
