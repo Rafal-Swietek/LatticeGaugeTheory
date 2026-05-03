@@ -101,7 +101,7 @@ namespace FermiHubbard_UI{
         
 
         void test_gauge_violation();
-        void test_gauge_violation_states();
+        void test_monomer_concentration();
         // ----------------------------------- HELPER FUNCTIONS
 	    
         // virtual element_type

@@ -33,8 +33,9 @@ void ui::make_sim(){
 		break;
 	case 1:
 		test_gauge_violation();
+        break;
 	case 2:
-		test_gauge_violation_states();
+		test_monomer_concentration();
 		break;
 	default:
 		#define generate_scaling_array(name) arma::linspace(this->name, this->name + this->name##s * (this->name##n - 1), this->name##n)
@@ -75,16 +76,68 @@ void ui::test_gauge_violation()
 	size_t dim = this->ptr_to_model->get_hilbert_size();
 	std::string info = this->set_info();
 
+    size_t dim_cut = 5000;
     arma::sp_cx_mat H = cast_cx_sparse(this->ptr_to_model->get_hamiltonian());
-	const size_t size = dim > 1e5? this->l_steps : dim;
+	const size_t size = dim > dim_cut? this->l_steps : dim;
 
+	clk::time_point start = std::chrono::system_clock::now();
+    clk::time_point start_tot = start;
+    if(dim > dim_cut){
+        this->ptr_to_model->diag_sparse(this->l_steps, this->l_bundle, this->tol, this->seed);	
+    }
+    else{
+        this->ptr_to_model->diagonalization();
+    }
+    const arma::vec E = this->ptr_to_model->get_eigenvalues();
+    const auto& V = this->ptr_to_model->get_eigenvectors();
+    std::cout << " - - - - - - finished diagonalization in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    start = std::chrono::system_clock::now();
+
+    lattice::lattice2D _lattice(this->Lx, this->Ly, 1-this->boundary_conditions);
     elem_ty val;
     u64 initial_state = 0;
-    std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, 0);
-    std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, 2);
-    std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, 8);
-    std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, 10);
-    
+    int ellx = 0, elly = 0;
+    int nup = 0, nd = 0;
+
+    // Create antiferromagnetic monomer initial state
+    for(int ell = 0; ell < this->L; ++ell)
+    {
+        int row = ell / this->Lx;
+        int col = ell % this->Lx;
+
+        if((row % 2) == 1 || (col % 2) == 1)
+            continue;
+
+        int block = col / 2;
+        bool first_pattern = (row % 4) == 0;
+
+        if(first_pattern)
+        {
+            if((block % 2) == 0 && (nup < this->syms.Nup))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
+                nup += 1;
+            }
+            else if((block % 2) == 1 && (nd < this->syms.Ndown))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
+                nd += 1;
+            }
+        }
+        else
+        {
+            if((block % 2) == 0 && (nd < this->syms.Ndown))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
+                nd += 1;
+            }
+            else if((block % 2) == 1 && (nup < this->syms.Nup))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
+                nup += 1;
+            }
+        }
+    }
     auto check_spin = QOps::__builtins::get_digit(this->L);
 
     arma::mat state_in_lattice(this->Ly, this->Lx, arma::fill::zeros);
@@ -99,17 +152,8 @@ void ui::test_gauge_violation()
     auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
     u64 index = _hilbert_space.find(initial_state);
     std::cout << initial_state << "\t" << index << "\t" << boost::dynamic_bitset<>(2*this->L, initial_state) << "\n" << state_in_lattice << std::endl << std::endl;
+    arma::Col<element_type> coeff = V.row(index).t();
 
-    arma::vec times = arma::linspace(0, 50, 5001);
-    arma::vec gauge_violation(times.size(), arma::fill::zeros);
-    arma::vec density_forbidden(times.size(), arma::fill::zeros);
-    
-    // this->ptr_to_model->diagonalization();
-    // const arma::vec E = this->ptr_to_model->get_eigenvalues();
-    // const auto& V = this->ptr_to_model->get_eigenvectors();
-    // arma::Col<element_type> coeff = V.row(index).t();
-
-    lattice::lattice2D _lattice(this->Lx, this->Ly, 1-this->boundary_conditions);
     // #pragma omp parallel for
     arma::mat gauge_init(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
     for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
@@ -117,198 +161,37 @@ void ui::test_gauge_violation()
         for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
         {
             int site = 2*i + Lx * 2*j;
-            int n_particle = check_spin(initial_state, site);
-            if(n_particle == 2) n_particle--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-            if(n_particle > 2) n_particle-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
+            int measure = check_spin(initial_state, site);
+            int n_particle = 0;
+            if(measure < 3) n_particle += _fermion_number(measure);
             auto neis = _lattice.get_neighbours(site);
             for(auto& nei : neis)
             {
                 if(nei > 0){
                     int n_dimer = check_spin(initial_state, nei);
-                    // if(n_dimer == 2) n_dimer--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-                    // if(n_dimer > 2) n_dimer-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
                     if(n_dimer == 3) n_particle += 1;
                 }
             }
-            gauge_init(j, i) += (double)n_particle;
+            gauge_init(j, i) = (double)n_particle;
         }
     }
-
-	gauge_init.save(arma::hdf5_name(dir + info + ".hdf5", "InitialGauge"));
+    E.save(arma::hdf5_name(dir + info + ".hdf5", "energies"));
+	gauge_init.save(arma::hdf5_name(dir + info + ".hdf5", "InitialGauge", arma::hdf5_opts::append));
     state_in_lattice.save(arma::hdf5_name(dir + info + ".hdf5", "InitialState", arma::hdf5_opts::append));
-    
-    times.save(arma::hdf5_name(dir + info + ".hdf5", "times", arma::hdf5_opts::append));
     
     arma::cx_vec init_state(dim, arma::fill::zeros);
     init_state(index) = 1.0;
-    for(long t_idx = 0; t_idx < times.size(); t_idx++){
-        double time = times(t_idx);
-        // arma::cx_vec init_state(dim, arma::fill::zeros);
-        // for(long alfa = 0; alfa < dim; alfa++)
-        // {
-        //     auto state = V.col(alfa);
-        //     init_state += std::exp(-1i * time * E(alfa)) * state * coeff(alfa);
-        // }
-        // init_state = arma::normalise(init_state);
-
-
-
-        // std::cout << arma::abs(init_state - init_state2).t();
-
-        arma::mat density(this->Ly, this->Lx, arma::fill::zeros);
-        arma::mat gauge(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
-        arma::mat density_forbidden_loc(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
-        for(long alfa = 0; alfa < dim; alfa++)
-        {
-            u64 base_state = _hilbert_space(alfa);
-        
-        // #pragma omp parallel for
-            for(long int j = 0; j < this->L; j++)
-            {
-                int n_particle = check_spin(base_state, j);
-                int xcoord = j % this->Lx;
-                int ycoord = j / this->Lx;
-                density(ycoord, xcoord) += _fermion_number(n_particle) * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
-            }
-            for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
-                for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
-                    density_forbidden_loc(j, i) = density(2*j + 1, 2*i + 1);
-
-        // #pragma omp parallel for
-            for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
-            {
-                for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
-                {
-                    int site = 2*i + Lx * 2*j;
-                    int n_particle = check_spin(base_state, site);
-                    if(n_particle == 2) n_particle--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-                    if(n_particle > 2) n_particle-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-                    auto neis = _lattice.get_neighbours(site);
-                    for(auto& nei : neis)
-                    {
-                        if(nei > 0){
-                            int n_dimer = check_spin(base_state, nei);
-                            if(n_dimer == 2) n_dimer--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-                            if(n_dimer > 2) n_dimer-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-                            n_particle += n_dimer;
-                        }
-                    }
-                    gauge(j, i) += (double)n_particle * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
-                }
-            }
-        }
-        gauge_violation(t_idx) = std::sqrt( arma::accu( arma::square(gauge - gauge_init) ) / (this->Lx * this->Ly / 4) );
-        density_forbidden(t_idx) = arma::accu( density_forbidden_loc ) / (this->Lx * this->Ly / 4);
-
-        lanczos::Lanczos<cpx> lancz(H, this->l_steps, -1, this->tol, this->seed, true, false, init_state);
-        lancz.time_evolution_step(init_state, this->dt);
-        // std::cout << "-------- Time: t = " << time << std::endl << std::endl;
-        // std::cout << density << std::endl;
-        // std::cout << "---" << std::endl;
-        // std::cout << gauge << std::endl;
-        // std::cout << "-------- ----------" << std::endl;
-	    if( t_idx%50 == 0){
-            gauge.save(arma::hdf5_name(dir + info + ".hdf5", "Gauge/t = " + to_string_prec(time), arma::hdf5_opts::append));
-            density.save(arma::hdf5_name(dir + info + ".hdf5", "Density/t = " + to_string_prec(time), arma::hdf5_opts::append));
-            density_forbidden_loc.save(arma::hdf5_name(dir + info + ".hdf5", "DensityForrbidden/t = " + to_string_prec(time), arma::hdf5_opts::append));
-        }
-        // arma::vec state_abs = arma::abs(init_state);
-        // state_abs.save(arma::hdf5_name("GaugeViolation.hdf5", "state: t = " + to_string_prec(time), arma::hdf5_opts::append));
-    }
-    gauge_violation.save(arma::hdf5_name(dir + info + ".hdf5", "gauge_violation", arma::hdf5_opts::append));
-    density_forbidden.save(arma::hdf5_name(dir + info + ".hdf5", "density_forbidden", arma::hdf5_opts::append));
-
-    // arma::vec gauge_violation2(times.size(), arma::fill::zeros);
-    // arma::vec density_forbidden2(times.size(), arma::fill::zeros);
-    // for(long t_idx = 0; t_idx < times.size(); t_idx++){
-    //     double time = times(t_idx);
-    //     arma::cx_vec init_state(dim, arma::fill::zeros);
-    //     for(long alfa = 0; alfa < dim; alfa++)
-    //     {
-    //         auto state = V.col(alfa);
-    //         init_state += std::exp(-1i * time * E(alfa)) * state * coeff(alfa);
-    //     }
-    //     init_state = arma::normalise(init_state);
-    //     arma::mat density(this->Ly, this->Lx, arma::fill::zeros);
-    //     arma::mat gauge(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
-    //     arma::mat density_forbidden_loc(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
-    //     for(long alfa = 0; alfa < dim; alfa++)
-    //     {
-    //         u64 base_state = _hilbert_space(alfa);
-        
-    //     // #pragma omp parallel for
-    //         for(long int j = 0; j < this->L; j++)
-    //         {
-    //             int n_particle = check_spin(base_state, j);
-    //             int xcoord = j % this->Lx;
-    //             int ycoord = j / this->Lx;
-    //             density(ycoord, xcoord) += _fermion_number(n_particle) * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
-    //         }
-    //         for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
-    //             for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
-    //                 density_forbidden_loc(j, i) = density(2*j + 1, 2*i + 1);
-
-    //     // #pragma omp parallel for
-    //         for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
-    //         {
-    //             for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
-    //             {
-    //                 int site = 2*i + Lx * 2*j;
-    //                 int n_particle = check_spin(base_state, site);
-    //                 if(n_particle == 2) n_particle--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-    //                 if(n_particle > 2) n_particle-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-    //                 auto neis = _lattice.get_neighbours(site);
-    //                 for(auto& nei : neis)
-    //                 {
-    //                     if(nei > 0){
-    //                         int n_dimer = check_spin(base_state, nei);
-    //                         if(n_dimer == 2) n_dimer--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-    //                         if(n_dimer > 2) n_dimer-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-    //                         n_particle += n_dimer;
-    //                     }
-    //                 }
-    //                 gauge(j, i) += (double)n_particle * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
-    //             }
-    //         }
-    //     }
-    //     gauge_violation2(t_idx) = std::sqrt( arma::accu( arma::square(gauge - gauge_init) ) / (this->Lx * this->Ly / 4) );
-    //     density_forbidden2(t_idx) = arma::accu( density_forbidden_loc ) / (this->Lx * this->Ly / 4);
-    //     printSeparated(std::cout, "\t", 20, true, std::abs(gauge_violation(t_idx) - gauge_violation2(t_idx)), std::abs(density_forbidden(t_idx) - density_forbidden2(t_idx)));
-    // }
-}
-
-/// @brief Compare energie spactra for full model and all symmetry sectors combined
-void ui::test_gauge_violation_states()
-{          
-    std::string dir = this->saving_dir + "GaugeViolationState" + kPSep;
-	createDirs(dir);
-	
-	size_t dim = this->ptr_to_model->get_hilbert_size();
-	std::string info = this->set_info();
-
-    arma::sp_cx_mat H = cast_cx_sparse(this->ptr_to_model->get_hamiltonian());
-	const size_t size = dim > 1e5? this->l_steps : dim;
-
-    auto check_spin = QOps::__builtins::get_digit(this->L);
-
+    std::cout << " - - - - - - finished setting up initial state in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    start = std::chrono::system_clock::now();
     
-    // this->ptr_to_model->diagonalization();
-    // const arma::vec E = this->ptr_to_model->get_eigenvalues();
-    // const auto& V = this->ptr_to_model->get_eigenvectors();
-    // arma::Col<element_type> coeff = V.row(index).t();
-
-    lattice::lattice2D _lattice(this->Lx, this->Ly, 1-this->boundary_conditions);
-    this->ptr_to_model->diag_sparse(this->l_steps, this->l_bundle, this->tol, this->seed);	
-    auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
-    const arma::vec E = this->ptr_to_model->get_eigenvalues();
-    E.save(arma::hdf5_name(dir + info + ".hdf5", "energies"));
-
-    for(int k = 0; k < this->l_steps; k++)
+    arma::vec gauge_violation(size, arma::fill::zeros);
+    arma::vec density_forbidden(size, arma::fill::zeros);
+    for(int k = 0; k < size; k++)
     {
         arma::Col<ui::element_type> state = this->ptr_to_model->get_eigenState(k);
         arma::mat density(this->Ly, this->Lx, arma::fill::zeros);
         arma::mat gauge(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
-        arma::mat density_forbidden_loc(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
+        arma::mat density_forbidden_loc(this->Ly/2, this->Lx/2, arma::fill::zeros);
         for(long alfa = 0; alfa < dim; alfa++)
         {
             u64 base_state = _hilbert_space(alfa);
@@ -321,8 +204,77 @@ void ui::test_gauge_violation_states()
                 int ycoord = j / this->Lx;
                 density(ycoord, xcoord) += _fermion_number(n_particle) * std::abs(state(alfa)) * std::abs(state(alfa));
             }
+            
+            for(long int i = 0; i < this->Lx/2; i+=1)
+                for(long int j = 0; j < this->Ly/2; j+=1)
+                    density_forbidden_loc(j, i) = density(2*j + 1, 2*i + 1);
+
+        // #pragma omp parallel for
             for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
+            {
                 for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
+                {
+                    int site = 2*i + Lx * 2*j;
+                    int n_particle = _fermion_number( check_spin(initial_state, site) );
+                    auto neis = _lattice.get_neighbours(site);
+                    for(auto& nei : neis)
+                    {
+                        if(nei > 0){
+                            int n_dimer = check_spin(base_state, nei);
+                            if(n_dimer == 3) n_particle += n_dimer;
+                        }
+                    }
+                    gauge(j, i) += (double)n_particle * std::abs(state(alfa)) * std::abs(state(alfa));
+                }
+            }
+        }
+	    {
+            gauge.save(arma::hdf5_name(dir + info + ".hdf5", "Gauge_State/n = " + std::to_string(k), arma::hdf5_opts::append));
+            density.save(arma::hdf5_name(dir + info + ".hdf5", "Density_State/n = " + std::to_string(k), arma::hdf5_opts::append));
+            density_forbidden_loc.save(arma::hdf5_name(dir + info + ".hdf5", "DensityForrbidden_State/n = " + std::to_string(k), arma::hdf5_opts::append));
+        }
+        gauge_violation(k) = std::sqrt( arma::accu( arma::square(gauge - gauge_init) ) / (this->Lx * this->Ly / 4) );
+        density_forbidden(k) = arma::accu( density_forbidden_loc ) / (this->Lx * this->Ly / 4);
+    }
+    gauge_violation.save(arma::hdf5_name(dir + info + ".hdf5", "gauge_violation_states", arma::hdf5_opts::append));
+    density_forbidden.save(arma::hdf5_name(dir + info + ".hdf5", "density_forbidden_states", arma::hdf5_opts::append));
+    std::cout << " - - - - - - finished eigenstate measures in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    start = std::chrono::system_clock::now();
+
+    arma::vec times = arma::linspace(0, 200, 20001);
+    gauge_violation = arma::vec(times.size(), arma::fill::zeros);
+    density_forbidden = arma::vec(times.size(), arma::fill::zeros);
+
+    times.save(arma::hdf5_name(dir + info + ".hdf5", "times", arma::hdf5_opts::append));
+    for(long t_idx = 0; t_idx < times.size(); t_idx++)
+    {
+        double time = times(t_idx);
+        if(dim <= dim_cut){
+            init_state = arma::cx_vec(dim, arma::fill::zeros);
+            for(long alfa = 0; alfa < dim; alfa++)
+            {
+                auto state = V.col(alfa);
+                init_state += std::exp(-1i * time * E(alfa)) * state * coeff(alfa);
+            }
+            init_state = arma::normalise(init_state);
+        }
+        arma::mat density(this->Ly, this->Lx, arma::fill::zeros);
+        arma::mat gauge(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
+        arma::mat density_forbidden_loc( this->Ly/2, this->Lx/2, arma::fill::zeros);
+        for(long alfa = 0; alfa < dim; alfa++)
+        {
+            u64 base_state = _hilbert_space(alfa);
+        
+        // #pragma omp parallel for
+            for(long int j = 0; j < this->L; j++)
+            {
+                int n_particle = check_spin(base_state, j);
+                int xcoord = j % this->Lx;
+                int ycoord = j / this->Lx;
+                density(ycoord, xcoord) += _fermion_number(n_particle) * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
+            }
+            for(long int i = 0; i < this->Lx/2; i+=1)
+                for(long int j = 0; j < this->Ly/2; j+=1)
                     density_forbidden_loc(j, i) = density(2*j + 1, 2*i + 1);
 
         // #pragma omp parallel for
@@ -339,23 +291,244 @@ void ui::test_gauge_violation_states()
                     {
                         if(nei > 0){
                             int n_dimer = check_spin(base_state, nei);
-                            if(n_dimer == 2) n_dimer--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-                            if(n_dimer > 2) n_dimer-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
-                            n_particle += n_dimer;
+                            if(n_dimer == 3) n_particle += 1;
                         }
                     }
-                    gauge(j, i) += (double)n_particle * std::abs(state(alfa)) * std::abs(state(alfa));
+                    gauge(j, i) += (double)n_particle * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
                 }
             }
         }
-	    {
-            gauge.save(arma::hdf5_name(dir + info + ".hdf5", "Gauge/n = " + std::to_string(k), arma::hdf5_opts::append));
-            density.save(arma::hdf5_name(dir + info + ".hdf5", "Density/n = " + std::to_string(k), arma::hdf5_opts::append));
-            density_forbidden_loc.save(arma::hdf5_name(dir + info + ".hdf5", "DensityForrbidden/n = " + std::to_string(k), arma::hdf5_opts::append));
+        gauge_violation(t_idx) = std::sqrt( arma::accu( arma::square(gauge - gauge_init) ) / (this->Lx * this->Ly / 4) );
+        density_forbidden(t_idx) = arma::accu( density_forbidden_loc ) / (this->Lx * this->Ly / 4);
+
+        if(dim > dim_cut){
+            lanczos::Lanczos<cpx> lancz(H, this->l_steps, -1, this->tol, this->seed, true, false, init_state);
+            lancz.time_evolution_step(init_state, this->dt);
+        }
+        
+	    if( t_idx%200 == 0){
+            gauge.save(arma::hdf5_name(dir + info + ".hdf5", "Gauge/t = " + to_string_prec(time), arma::hdf5_opts::append));
+            density.save(arma::hdf5_name(dir + info + ".hdf5", "Density/t = " + to_string_prec(time), arma::hdf5_opts::append));
+            density_forbidden_loc.save(arma::hdf5_name(dir + info + ".hdf5", "DensityForrbidden/t = " + to_string_prec(time), arma::hdf5_opts::append));
         }
         // arma::vec state_abs = arma::abs(init_state);
         // state_abs.save(arma::hdf5_name("GaugeViolation.hdf5", "state: t = " + to_string_prec(time), arma::hdf5_opts::append));
     }
+    gauge_violation.save(arma::hdf5_name(dir + info + ".hdf5", "gauge_violation", arma::hdf5_opts::append));
+    density_forbidden.save(arma::hdf5_name(dir + info + ".hdf5", "density_forbidden", arma::hdf5_opts::append));
+
+    std::cout << " - - - - - - finished time evolution in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    std::cout << " - - - - - - finished Gauge test in : " << tim_s(start_tot) << " s - - - - - - " << std::endl; // simulation end
+}
+
+/// @brief Compare energie spactra for full model and all symmetry sectors combined
+void ui::test_monomer_concentration()
+{          
+    std::string dir = this->saving_dir + "MonomerDensity" + kPSep;
+	createDirs(dir);
+	
+	size_t dim = this->ptr_to_model->get_hilbert_size();
+	std::string info = this->set_info();
+
+    size_t dim_cut = 7e4;
+    arma::sp_cx_mat H = cast_cx_sparse(this->ptr_to_model->get_hamiltonian());
+	const size_t size = dim > dim_cut? this->l_steps : dim;
+
+	clk::time_point start = std::chrono::system_clock::now();
+    clk::time_point start_tot = start;
+    if(dim > dim_cut){
+        this->ptr_to_model->diag_sparse(this->l_steps, this->l_bundle, this->tol, this->seed);	
+    }
+    else{
+        this->ptr_to_model->diagonalization();
+    }
+    const arma::vec E = this->ptr_to_model->get_eigenvalues();
+    const auto& V = this->ptr_to_model->get_eigenvectors();
+    std::cout << " - - - - - - finished diagonalization in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    start = std::chrono::system_clock::now();
+
+    lattice::lattice2D _lattice(this->Lx, this->Ly, 1-this->boundary_conditions);
+    elem_ty val;
+    u64 initial_state = 0;
+    int ellx = 0, elly = 0;
+    int nup = 0, nd = 0;
+
+    // Create antiferromagnetic monomer initial state
+    for(int ell = 0; ell < this->L; ++ell)
+    {
+        int row = ell / this->Lx;
+        int col = ell % this->Lx;
+
+        if((row % 2) == 1 || (col % 2) == 1)
+            continue;
+
+        int block = col / 2;
+        bool first_pattern = (row % 4) == 0;
+
+        if(first_pattern)
+        {
+            if((block % 2) == 0 && (nup < this->syms.Nup))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
+                nup += 1;
+            }
+            else if((block % 2) == 1 && (nd < this->syms.Ndown))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
+                nd += 1;
+            }
+        }
+        else
+        {
+            if((block % 2) == 0 && (nd < this->syms.Ndown))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_down<elem_ty>(initial_state, this->L, ell);
+                nd += 1;
+            }
+            else if((block % 2) == 1 && (nup < this->syms.Nup))
+            {
+                std::tie(val, initial_state) = operators::fermions::spin_half::create_up<elem_ty>(initial_state, this->L, ell);
+                nup += 1;
+            }
+        }
+    }
+    auto check_spin = QOps::__builtins::get_digit(this->L);
+
+    arma::mat state_in_lattice(this->Ly, this->Lx, arma::fill::zeros);
+    for(long int j = 0; j < this->L; j++)
+    {
+        int n_particle = check_spin(initial_state, j);
+        int xcoord = j % this->Lx;
+        int ycoord = j / this->Lx;
+        // printSeparated(std::cout, "\t", 20, true, state, j, xcoord, ycoord, n_particle);
+        state_in_lattice(ycoord, xcoord) = _fermion_number(n_particle);
+    }
+    auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
+    u64 index = _hilbert_space.find(initial_state);
+    std::cout << initial_state << "\t" << index << "\t" << boost::dynamic_bitset<>(2*this->L, initial_state) << "\n" << state_in_lattice << std::endl << std::endl;
+    arma::Col<element_type> coeff = V.row(index).t();
+
+    E.save(arma::hdf5_name(dir + info + ".hdf5", "energies"));
+    state_in_lattice.save(arma::hdf5_name(dir + info + ".hdf5", "InitialState", arma::hdf5_opts::append));
+    
+    arma::cx_vec init_state(dim, arma::fill::zeros);
+    init_state(index) = 1.0;
+    std::cout << " - - - - - - finished setting up initial state in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    start = std::chrono::system_clock::now();
+    
+    arma::vec density_dimer(size, arma::fill::zeros);
+    arma::vec density_monomer(size, arma::fill::zeros);
+    arma::vec density_forbidden(size, arma::fill::zeros);
+    arma::vec information_entropy(size, arma::fill::zeros);
+    arma::vec inverse_participation_ratio(size, arma::fill::zeros);
+    for(int k = 0; k < size; k++)
+    {
+        arma::Col<ui::element_type> state = this->ptr_to_model->get_eigenState(k);
+        arma::mat density(this->Ly, this->Lx, arma::fill::zeros);
+        double _pr_ = 0;
+        for(long alfa = 0; alfa < dim; alfa++)
+        {
+            _pr_ += std::pow( std::abs(state(alfa) * state(alfa)), 2 );
+            u64 base_state = _hilbert_space(alfa);
+        
+        // #pragma omp parallel for
+            for(long int j = 0; j < this->L; j++)
+            {
+                int n_particle = check_spin(base_state, j);
+                int xcoord = j % this->Lx;
+                int ycoord = j / this->Lx;
+                double prob = std::abs(state(alfa)) * std::abs(state(alfa));
+                double tmp = _fermion_number(n_particle) * prob;
+                density(ycoord, xcoord) += tmp;
+                if( (xcoord%2) ^ (ycoord%2) )
+                    { density_dimer(k) += (n_particle > 2? 1 : 0) * prob; }
+                
+                if( (xcoord%2==0) && (ycoord%2==0) )
+                    { density_monomer(k) += tmp; }
+                
+                if( (xcoord%2) && (ycoord%2) )
+                    { density_forbidden(k) += tmp; }
+            }
+        }
+        inverse_participation_ratio(k) = _pr_;
+		information_entropy(k) = -std::log(_pr_);
+        density.save(arma::hdf5_name(dir + info + ".hdf5", "Density_State/n = " + std::to_string(k), arma::hdf5_opts::append));
+    }
+    density_dimer /= double(this->Lx * this->Ly / 2.);
+    density_monomer /= double(this->Lx * this->Ly / 4.);
+    density_forbidden /= double(this->Lx * this->Ly / 4.);
+
+    density_dimer.save(arma::hdf5_name(dir + info + ".hdf5", "density_dimer_states", arma::hdf5_opts::append));
+    density_monomer.save(arma::hdf5_name(dir + info + ".hdf5", "density_monomer_states", arma::hdf5_opts::append));
+    density_forbidden.save(arma::hdf5_name(dir + info + ".hdf5", "density_forbidden_states", arma::hdf5_opts::append));
+    information_entropy.save(arma::hdf5_name(dir + info + ".hdf5", "information_entropy", arma::hdf5_opts::append));
+    inverse_participation_ratio.save(arma::hdf5_name(dir + info + ".hdf5", "inverse_participation_ratio", arma::hdf5_opts::append));
+    std::cout << " - - - - - - finished eigenstate measures in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    start = std::chrono::system_clock::now();
+
+    arma::vec times = arma::linspace(0, 100, 10001);
+    density_dimer = arma::vec(times.size(), arma::fill::zeros);
+    density_monomer = arma::vec(times.size(), arma::fill::zeros);
+    density_forbidden = arma::vec(times.size(), arma::fill::zeros);
+
+    times.save(arma::hdf5_name(dir + info + ".hdf5", "times", arma::hdf5_opts::append));
+    for(long t_idx = 0; t_idx < times.size(); t_idx++)
+    {
+        double time = times(t_idx);
+        if(dim <= dim_cut){
+            init_state = arma::cx_vec(dim, arma::fill::zeros);
+            for(long alfa = 0; alfa < dim; alfa++)
+            {
+                auto state = V.col(alfa);
+                init_state += std::exp(-1i * time * E(alfa)) * state * coeff(alfa);
+            }
+            init_state = arma::normalise(init_state);
+        }
+        arma::mat density(this->Ly, this->Lx, arma::fill::zeros);
+        for(long alfa = 0; alfa < dim; alfa++)
+        {
+            u64 base_state = _hilbert_space(alfa);
+        
+        // #pragma omp parallel for
+            for(long int j = 0; j < this->L; j++)
+            {
+                int n_particle = check_spin(base_state, j);
+                int xcoord = j % this->Lx;
+                int ycoord = j / this->Lx;
+                double prob = std::abs(init_state(alfa)) * std::abs(init_state(alfa));
+                double tmp = _fermion_number(n_particle) * prob;
+                density(ycoord, xcoord) += tmp;
+                if( (xcoord%2) ^ (ycoord%2) )
+                    { density_dimer(t_idx) += (n_particle > 2? 1 : 0) * prob; }
+                
+                if( (xcoord%2==0) && (ycoord%2==0) )
+                    { density_monomer(t_idx) += tmp; }
+                
+                if( (xcoord%2) && (ycoord%2) )
+                    { density_forbidden(t_idx) += tmp; }
+            }
+        }
+
+        if(dim > dim_cut){
+            lanczos::Lanczos<cpx> lancz(H, 10, -1, this->tol, this->seed, true, false, init_state);
+            lancz.time_evolution_step(init_state, this->dt);
+        }
+        
+	    if( t_idx%200 == 0){
+            density.save(arma::hdf5_name(dir + info + ".hdf5", "Density/t = " + to_string_prec(time), arma::hdf5_opts::append));
+        }
+        // arma::vec state_abs = arma::abs(init_state);
+        // state_abs.save(arma::hdf5_name("GaugeViolation.hdf5", "state: t = " + to_string_prec(time), arma::hdf5_opts::append));
+    }
+    density_dimer /= double(this->Lx * this->Ly / 2.);
+    density_monomer /= double(this->Lx * this->Ly / 4.);
+    density_forbidden /= double(this->Lx * this->Ly / 4.);
+    density_dimer.save(arma::hdf5_name(dir + info + ".hdf5", "density_dimer", arma::hdf5_opts::append));
+    density_monomer.save(arma::hdf5_name(dir + info + ".hdf5", "density_monomer", arma::hdf5_opts::append));
+    density_forbidden.save(arma::hdf5_name(dir + info + ".hdf5", "density_forbidden", arma::hdf5_opts::append));
+
+    std::cout << " - - - - - - finished time evolution in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
+    std::cout << " - - - - - - finished Gauge test in : " << tim_s(start_tot) << " s - - - - - - " << std::endl; // simulation end
 }
 
 /// @brief 
@@ -586,10 +759,10 @@ void ui::print_help() const {
 /// @brief 
 void ui::printAllOptions() const{
     FermiUI::printAllOptions();
-    std::cout << "H = \u03A3_j H_j" << std::endl << std::endl;
-	std::cout << "H_j = P_j (X_j X_j+1 + Y_j Y_j+1 + \u0394 Z_j Z_j+1) P_j+1" << std::endl;
+    // std::cout << "H = \u03A3_j H_j" << std::endl << std::endl;
+	// std::cout << "H_j = " << std::endl;
 
-	std::cout << "------------------------------ CHOSEN ConstrainedXXZ OPTIONS:" << std::endl;
+	std::cout << "------------------------------ CHOSEN 2D Fermi Hubbard OPTIONS:" << std::endl;
     std::cout 
           << "Lx  = " << this->Lx << std::endl
 		  << "Lxn = " << this->Lxn << std::endl
@@ -622,3 +795,63 @@ void ui::printAllOptions() const{
 }   
 
 };
+
+
+
+    // arma::vec gauge_violation2(times.size(), arma::fill::zeros);
+    // arma::vec density_forbidden2(times.size(), arma::fill::zeros);
+    // for(long t_idx = 0; t_idx < times.size(); t_idx++){
+    //     double time = times(t_idx);
+    //     arma::cx_vec init_state(dim, arma::fill::zeros);
+    //     for(long alfa = 0; alfa < dim; alfa++)
+    //     {
+    //         auto state = V.col(alfa);
+    //         init_state += std::exp(-1i * time * E(alfa)) * state * coeff(alfa);
+    //     }
+    //     init_state = arma::normalise(init_state);
+    //     arma::mat density(this->Ly, this->Lx, arma::fill::zeros);
+    //     arma::mat gauge(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
+    //     arma::mat density_forbidden_loc(std::ceil(this->Ly/2.), std::ceil(this->Lx/2.), arma::fill::zeros);
+    //     for(long alfa = 0; alfa < dim; alfa++)
+    //     {
+    //         u64 base_state = _hilbert_space(alfa);
+        
+    //     // #pragma omp parallel for
+    //         for(long int j = 0; j < this->L; j++)
+    //         {
+    //             int n_particle = check_spin(base_state, j);
+    //             int xcoord = j % this->Lx;
+    //             int ycoord = j / this->Lx;
+    //             density(ycoord, xcoord) += _fermion_number(n_particle) * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
+    //         }
+    //         for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
+    //             for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
+    //                 density_forbidden_loc(j, i) = density(2*j + 1, 2*i + 1);
+
+    //     // #pragma omp parallel for
+    //         for(long int i = 0; i < std::ceil(this->Lx/2.); i+=1)
+    //         {
+    //             for(long int j = 0; j < std::ceil(this->Ly/2.); j+=1)
+    //             {
+    //                 int site = 2*i + Lx * 2*j;
+    //                 int n_particle = check_spin(base_state, site);
+    //                 if(n_particle == 2) n_particle--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
+    //                 if(n_particle > 2) n_particle-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
+    //                 auto neis = _lattice.get_neighbours(site);
+    //                 for(auto& nei : neis)
+    //                 {
+    //                     if(nei > 0){
+    //                         int n_dimer = check_spin(base_state, nei);
+    //                         if(n_dimer == 2) n_dimer--; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
+    //                         if(n_dimer > 2) n_dimer-=2; // 0 - empty, 1 - spin up, 2 - spin down, 3 - doublon
+    //                         n_particle += n_dimer;
+    //                     }
+    //                 }
+    //                 gauge(j, i) += (double)n_particle * std::abs(init_state(alfa)) * std::abs(init_state(alfa));
+    //             }
+    //         }
+    //     }
+    //     gauge_violation2(t_idx) = std::sqrt( arma::accu( arma::square(gauge - gauge_init) ) / (this->Lx * this->Ly / 4) );
+    //     density_forbidden2(t_idx) = arma::accu( density_forbidden_loc ) / (this->Lx * this->Ly / 4);
+    //     printSeparated(std::cout, "\t", 20, true, std::abs(gauge_violation(t_idx) - gauge_violation2(t_idx)), std::abs(density_forbidden(t_idx) - density_forbidden2(t_idx)));
+    // }
