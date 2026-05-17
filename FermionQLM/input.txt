@@ -1,0 +1,1 @@
+-Lx 10 -Ly 10 -Nup -1 -Ndown 1 -tau 1.0 -mass -1.0 -masss 0.1 -massn 21 -th 10 -fun 20 -s -1 -ch 1 -num_of_points 50000 -b 0 -k 4 -p 1 -zx 1 -l_steps 10 -l_bundle 1 -reortho 1 -l_maxiter 2000 -tol 1e-14
