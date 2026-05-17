@@ -163,7 +163,7 @@ void ui::spin_impurity()
     std::cout << " - - - - - - finished eigenstate measures in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
     start = std::chrono::system_clock::now();
 
-    arma::vec times = arma::linspace(0, 50, 1001);
+    arma::vec times = arma::linspace(0, 100, 10001);
     this->dt = times(1) - times(0);
     _ndown_density = arma::vec(times.size(), arma::fill::zeros);
     _nmonomer_density = arma::vec(times.size(), arma::fill::zeros);
