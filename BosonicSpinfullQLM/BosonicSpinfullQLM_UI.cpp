@@ -483,7 +483,7 @@ void ui::LiebLatticeRandomShape(){
         arma::Col<int> sub_arma = arma::conv_to<arma::Col<int>>::from(sub);
         sub_arma.save(arma::hdf5_name(dir + info + ".hdf5", "sublattice", arma::hdf5_opts::append));
 
-        V.save(arma::hdf5_name(dir + info + ".hdf5", "V", arma::hdf5_opts::append));
+        // V.save(arma::hdf5_name(dir + info + ".hdf5", "V", arma::hdf5_opts::append));
 
         x.save(arma::hdf5_name(dir + info + ".hdf5", "x coords", arma::hdf5_opts::append));
         y.save(arma::hdf5_name(dir + info + ".hdf5", "y coords", arma::hdf5_opts::append));
