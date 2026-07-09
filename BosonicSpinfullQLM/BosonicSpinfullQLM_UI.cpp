@@ -23,127 +23,127 @@ void ui::make_sim(){
     if(this->fun != 5 && this->fun != 6)
         this->ptr_to_model = create_new_model_pointer();
     
-    arma::SpMat<ui::element_type> H = this->ptr_to_model->get_hamiltonian();
-    // // std::cout << arma::mat(H) << std::endl;
-    arma::vec E = arma::eig_sym(arma::mat(H));
-    arma::uvec x = arma::find(arma::abs(E) < 1e-10);
-    // std::cout << E << std::endl;
-    auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
-    u64 dim = _hilbert_space.get_hilbert_space_size();
+    // arma::SpMat<ui::element_type> H = this->ptr_to_model->get_hamiltonian();
+    // // // std::cout << arma::mat(H) << std::endl;
+    // arma::vec E = arma::eig_sym(arma::mat(H));
+    // arma::uvec x = arma::find(arma::abs(E) < 1e-10);
+    // // std::cout << E << std::endl;
+    // auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
+    // u64 dim = _hilbert_space.get_hilbert_space_size();
     
-    struct PlaquetteTerm {
-        int dx1, dy1;
-        ui::element_type d1;
+    // struct PlaquetteTerm {
+    //     int dx1, dy1;
+    //     ui::element_type d1;
 
-        int dx2, dy2;
-        ui::element_type d2;
+    //     int dx2, dy2;
+    //     ui::element_type d2;
 
-        double sign;
-    };
+    //     double sign;
+    // };
 
-    const std::array<PlaquetteTerm,4> plaquette = {{
-        {0,0, DIMER_RIGHT, 1,0, DIMER_LEFT,  +1},
-        {0,0, DIMER_UP,    0,1, DIMER_DOWN,  -1},
-        {1,0, DIMER_UP,    1,1, DIMER_DOWN,  -1},
-        {0,1, DIMER_RIGHT, 1,1, DIMER_LEFT,  +1}
-    }};
+    // const std::array<PlaquetteTerm,4> plaquette = {{
+    //     {0,0, DIMER_RIGHT, 1,0, DIMER_LEFT,  +1},
+    //     {0,0, DIMER_UP,    0,1, DIMER_DOWN,  -1},
+    //     {1,0, DIMER_UP,    1,1, DIMER_DOWN,  -1},
+    //     {0,1, DIMER_RIGHT, 1,1, DIMER_LEFT,  +1}
+    // }};
 
-    auto addPlaquette =
-    [&](PackedLattice2D &lat, int x, int y, const PlaquetteTerm &p)
-    {
-        lat.set_block((x + p.dx1) % Lx, (y + p.dy1) % Ly, p.d1);
-        lat.set_block((x + p.dx2) % Lx, (y + p.dy2) % Ly, p.d2);
-    };
-    PackedLattice2D initial_state(this->Lx, this->Ly);
-    int num_0_mode = 0;
-    // for (int x0 = 0; x0 < Lx - int(boundary_conditions); ++x0)
-    // for (int y0 = 0; y0 < Ly - int(boundary_conditions); ++y0)
+    // auto addPlaquette =
+    // [&](PackedLattice2D &lat, int x, int y, const PlaquetteTerm &p)
     // {
-    //     arma::Col<ui::element_type> state(dim, arma::fill::zeros);
+    //     lat.set_block((x + p.dx1) % Lx, (y + p.dy1) % Ly, p.d1);
+    //     lat.set_block((x + p.dx2) % Lx, (y + p.dy2) % Ly, p.d2);
+    // };
+    // PackedLattice2D initial_state(this->Lx, this->Ly);
+    // int num_0_mode = 0;
+    // // for (int x0 = 0; x0 < Lx - int(boundary_conditions); ++x0)
+    // // for (int y0 = 0; y0 < Ly - int(boundary_conditions); ++y0)
+    // // {
+    // //     arma::Col<ui::element_type> state(dim, arma::fill::zeros);
 
-    //     for (const auto &p : plaquette)
+    // //     for (const auto &p : plaquette)
+    // //     {
+    // //         initial_state.fill_all(UP_MONOMER);
+
+    // //         addPlaquette(initial_state, x0, y0, p);
+
+    // //         auto index = _hilbert_space.find(initial_state);
+    // //         state(index) = p.sign;
+    // //     }
+
+    // //     state = arma::normalise(state);
+
+    // //     printSeparated(std::cout, "\t", 20, true, x0, y0, "|| H|psi> || = ", arma::norm(H * state));
+
+    // //     ++num_0_mode;
+    // // }
+    // int Nx = Lx - int(boundary_conditions);
+    // int Ny = Ly - int(boundary_conditions);
+    // auto overlap = [&](int x0, int y0, int x1, int y1)
+    // {
+    //     std::array<std::pair<int,int>,4> v0 = {{
+    //         { x0 % Lx,             y0 % Ly             },
+    //         { (x0+1) % Lx,         y0 % Ly             },
+    //         { x0 % Lx,            (y0+1) % Ly          },
+    //         { (x0+1) % Lx,        (y0+1) % Ly          }
+    //     }};
+
+    //     std::array<std::pair<int,int>,4> v1 = {{
+    //         { x1 % Lx,             y1 % Ly             },
+    //         { (x1+1) % Lx,         y1 % Ly             },
+    //         { x1 % Lx,            (y1+1) % Ly          },
+    //         { (x1+1) % Lx,        (y1+1) % Ly          }
+    //     }};
+
+    //     for (const auto &a : v0)
+    //         for (const auto &b : v1)
+    //             if (a == b)
+    //                 return true;
+
+    //     return false;
+    // };
+    // for (int x0 = 0; x0 < Nx; ++x0)
+    // for (int y0 = 0; y0 < Ny; ++y0)
+    // {
+    //     int id0 = x0*Ny + y0;
+
+    //     for (int x1 = 0; x1 < Nx; ++x1)
+    //     for (int y1 = 0; y1 < Ny; ++y1)
     //     {
-    //         initial_state.fill_all(UP_MONOMER);
+    //         int id1 = x1*Ny + y1;
 
-    //         addPlaquette(initial_state, x0, y0, p);
+    //         if (id1 <= id0)
+    //             continue;
 
-    //         auto index = _hilbert_space.find(initial_state);
-    //         state(index) = p.sign;
+    //         // don't allow overlapping plaquettes
+    //         if (overlap(x0, y0, x1, y1))
+    //             continue;
+
+    //         arma::Col<ui::element_type> state(dim, arma::fill::zeros);
+
+    //         for (const auto &p0 : plaquette)
+    //         for (const auto &p1 : plaquette)
+    //         {
+    //             initial_state.fill_all(UP_MONOMER);
+
+    //             addPlaquette(initial_state, x0, y0, p0);
+    //             addPlaquette(initial_state, x1, y1, p1);
+
+    //             auto index = _hilbert_space.find(initial_state);
+    //             if(index >= dim || index < 0)
+    //                 initial_state.print_state();
+    //             state(index) += p0.sign * p1.sign;
+    //         }
+
+    //         state = arma::normalise(state);
+
+    //         printSeparated(std::cout, "\t", 20, true, x0, y0, x1, y1, "|| H|psi> || = ", arma::norm(H * state));
+    //         ++num_0_mode;
     //     }
-
-    //     state = arma::normalise(state);
-
-    //     printSeparated(std::cout, "\t", 20, true, x0, y0, "|| H|psi> || = ", arma::norm(H * state));
-
-    //     ++num_0_mode;
     // }
-    int Nx = Lx - int(boundary_conditions);
-    int Ny = Ly - int(boundary_conditions);
-    auto overlap = [&](int x0, int y0, int x1, int y1)
-    {
-        std::array<std::pair<int,int>,4> v0 = {{
-            { x0 % Lx,             y0 % Ly             },
-            { (x0+1) % Lx,         y0 % Ly             },
-            { x0 % Lx,            (y0+1) % Ly          },
-            { (x0+1) % Lx,        (y0+1) % Ly          }
-        }};
-
-        std::array<std::pair<int,int>,4> v1 = {{
-            { x1 % Lx,             y1 % Ly             },
-            { (x1+1) % Lx,         y1 % Ly             },
-            { x1 % Lx,            (y1+1) % Ly          },
-            { (x1+1) % Lx,        (y1+1) % Ly          }
-        }};
-
-        for (const auto &a : v0)
-            for (const auto &b : v1)
-                if (a == b)
-                    return true;
-
-        return false;
-    };
-    for (int x0 = 0; x0 < Nx; ++x0)
-    for (int y0 = 0; y0 < Ny; ++y0)
-    {
-        int id0 = x0*Ny + y0;
-
-        for (int x1 = 0; x1 < Nx; ++x1)
-        for (int y1 = 0; y1 < Ny; ++y1)
-        {
-            int id1 = x1*Ny + y1;
-
-            if (id1 <= id0)
-                continue;
-
-            // don't allow overlapping plaquettes
-            if (overlap(x0, y0, x1, y1))
-                continue;
-
-            arma::Col<ui::element_type> state(dim, arma::fill::zeros);
-
-            for (const auto &p0 : plaquette)
-            for (const auto &p1 : plaquette)
-            {
-                initial_state.fill_all(UP_MONOMER);
-
-                addPlaquette(initial_state, x0, y0, p0);
-                addPlaquette(initial_state, x1, y1, p1);
-
-                auto index = _hilbert_space.find(initial_state);
-                if(index >= dim || index < 0)
-                    initial_state.print_state();
-                state(index) += p0.sign * p1.sign;
-            }
-
-            state = arma::normalise(state);
-
-            printSeparated(std::cout, "\t", 20, true, x0, y0, x1, y1, "|| H|psi> || = ", arma::norm(H * state));
-            ++num_0_mode;
-        }
-    }
-    std::cout << "------------" << std::endl;
-    std::cout << "N0 = " << num_0_mode << "\t\t" << x.size() << std::endl;
-    return;
+    // std::cout << "------------" << std::endl;
+    // std::cout << "N0 = " << num_0_mode << "\t\t" << x.size() << std::endl;
+    // return;
 
     // auto _hilbert_space = this->ptr_to_model->get_model_ref().get_hilbert_space();
     // size_t dim = this->ptr_to_model->get_hilbert_size();
