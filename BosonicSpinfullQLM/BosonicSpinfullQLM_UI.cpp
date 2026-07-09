@@ -496,7 +496,7 @@ void ui::LiebLatticeRandomShape(){
         double _eta = 0.02;
         double norm_inv = 1. / std::sqrt(constants<double>::two_pi * _eta*_eta);
         arma::rowvec coeff = V.row(0);
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long e_idx = 0; e_idx < energies.size(); e_idx++){
             // doubl
             // ldos(e_idx) += arma::sum(arma::square(coeff.t()) % _eta / ( arma::square(Esym))
@@ -522,7 +522,7 @@ void ui::LiebLatticeRandomShape(){
         times.save(arma::hdf5_name(dir + info + ".hdf5", "times", arma::hdf5_opts::append));
 
         arma::cx_mat init_state(E.size(), times.size(), arma::fill::zeros);
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long t_idx = 0; t_idx < (long)times.size(); t_idx++)
         {
             const double time = times(t_idx);
@@ -542,7 +542,7 @@ void ui::LiebLatticeRandomShape(){
         arma::vec _ndown_spreading(times.size(), arma::fill::zeros);
         arma::vec return_probability(times.size(), arma::fill::zeros);
         arma::vec SpinDownNumber(times.size(), arma::fill::zeros);
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long t_idx = 0; t_idx < (long)times.size(); t_idx++)
         {
             const double time = times(t_idx);
@@ -861,7 +861,7 @@ void ui::spin_impurity()
                     arma::Mat<ui::element_type> Phi = Usym * symmetric_model->get_eigenvectors();
                     auto coeff = Phi.row(index);
                     double norm_inv = 1. / std::sqrt(constants<double>::two_pi * _eta*_eta);
-                #pragma omp for schedule(dynamic) nowait
+                #pragma omp for schedule(dynamic)
                     for(long e_idx = 0; e_idx < energies.size(); e_idx++){
                         // doubl
                         // ldos(e_idx) += arma::sum(arma::square(coeff.t()) % _eta / ( arma::square(Esym))
@@ -872,7 +872,7 @@ void ui::spin_impurity()
                             DOS(e_idx) += gauss;
                         }
                     }
-                #pragma omp for schedule(dynamic) nowait
+                #pragma omp for schedule(dynamic)
                     for(long t_idx = 0; t_idx < (long)times.size(); t_idx++)
                     {
                         const double time = times(t_idx);
@@ -896,7 +896,7 @@ void ui::spin_impurity()
         auto coeff = this->ptr_to_model->get_eigenStateRow(index);
         E.save(arma::hdf5_name(dir + info + ".hdf5", "energies", arma::hdf5_opts::append));
         double norm_inv = 1. / std::sqrt(constants<double>::two_pi * _eta*_eta);
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long e_idx = 0; e_idx < energies.size(); e_idx++){
             // doubl
             // ldos(e_idx) += arma::sum(arma::square(coeff.t()) % _eta / ( arma::square(Esym))
@@ -907,7 +907,7 @@ void ui::spin_impurity()
                 DOS(e_idx) += gauss;
             }
         }
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long t_idx = 0; t_idx < (long)times.size(); t_idx++)
         {
             const double time = times(t_idx);
@@ -956,7 +956,7 @@ void ui::spin_impurity()
         arma::mat _ndimer_right_density_state(this->Ly, this->Lx, arma::fill::zeros);
         arma::mat _ndimer_up_density_state(this->Ly, this->Lx, arma::fill::zeros);
 
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(int k = 0; k < size; k++)
         {
             #ifdef USE_SYMMETRIES
@@ -1054,7 +1054,7 @@ void ui::spin_impurity()
         arma::mat _nmonomer_density_t(this->Ly, this->Lx, arma::fill::zeros);
         arma::mat _dimer_right_density_t(this->Ly, this->Lx, arma::fill::zeros);
 
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long t_idx = 0; t_idx < (long)times.size(); t_idx++)
         {
             const double time = times(t_idx);
@@ -1418,7 +1418,7 @@ void ui::dimer_dynamics()
         
         arma::vec weights(dim, arma::fill::zeros);
     
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long alfa = 0; alfa < dim; ++alfa)
         {
         #ifdef USE_SYMMETRIES
@@ -1431,7 +1431,7 @@ void ui::dimer_dynamics()
 
             weights(alfa) = arma::accu(arma::square(arma::abs(state.rows(idx_start, idx_stop))));
         }
-    #pragma omp for schedule(dynamic) nowait
+    #pragma omp for schedule(dynamic)
         for(long t_idx = 0; t_idx < (long)times.size(); t_idx++)
         {
             const double time = times(t_idx);
@@ -1451,7 +1451,7 @@ void ui::dimer_dynamics()
     //         // Per-thread preallocated buffer → no allocation inside loop
     //         // arma::cx_vec init_state(dim, arma::fill::zeros);
 
-    //         // #pragma omp for schedule(dynamic) nowait
+    //         // #pragma omp for schedule(dynamic)
     //         for(long t_idx = 0; t_idx < (long)times.size(); t_idx++)
     //         {
     //             const double time = times(t_idx);
