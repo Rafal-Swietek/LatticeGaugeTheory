@@ -493,7 +493,7 @@ void ui::LiebLatticeRandomShape(){
 
         // arma::vec initial_state(E.size(), arma::fill::zeros);
         // initial_state(0) = 1.0;
-        double _eta = 0.05;
+        double _eta = 0.02;
         double norm_inv = 1. / std::sqrt(constants<double>::two_pi * _eta*_eta);
         arma::rowvec coeff = V.row(0);
     #pragma omp for schedule(dynamic) nowait
