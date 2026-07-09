@@ -345,7 +345,7 @@ void ui::LiebLatticeRandomShape(){
     const int NA = this->L;     // number of A sites
 
     std::mt19937 rng(this->seed);
-    for(int real = 0; real < 10; real++){
+    for(int real = 0; real < this->l_realis; real++){
         clk::time_point start = std::chrono::system_clock::now();
         clk::time_point start_re = std::chrono::system_clock::now();
         // ---------- random connected A cluster ----------
@@ -471,7 +471,7 @@ void ui::LiebLatticeRandomShape(){
         for (arma::uword n=0; n<E.size(); n++)
             for (int i : boundary)
                 Pboundary(n) += std::norm(V(i,n));
-        std::string dir = this->dir_prefix + "results" + kPSep + "LiebLatticeRandomShape" + kPSep + "realization=" + std::to_string(real) + kPSep;
+        std::string dir = this->dir_prefix + "results" + kPSep + "LiebLatticeRandomShape" + kPSep + "realization=" + std::to_string(real + this->jobid) + kPSep;
         createDirs(dir);
         std::string info = "_L=" + std::to_string(this->L) + \
                         ",tau=" + to_string_prec(this->tau) + \
@@ -1386,7 +1386,7 @@ void ui::dimer_dynamics()
         arma::Col<int> DimerNumber_dummy(dim);
         for(int k = 0; k < dim; k++)
             DimerNumber_dummy(k) = int( DimerNumber(k, k) );
-            
+
         arma::uvec idx = arma::find(DimerNumber_dummy == Ndimer);
         u64 idx_start = idx.front();
         u64 idx_stop  = idx.back();
@@ -2529,6 +2529,9 @@ void ui::parse_cmd_options(int argc, std::vector<std::string> argv)
     set_param(Ly);
 
     this->L = this->Lx * this->Ly;
+
+    choosen_option = "-jobid";
+    this->set_option(this->jobid, argv, choosen_option);
 
     //<! SYMMETRIES
     choosen_option = "-Nup";

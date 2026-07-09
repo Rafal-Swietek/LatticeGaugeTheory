@@ -23,7 +23,8 @@ namespace BosonicSpinfullQLM_UI{
         int taun, massn;
         
         int Lx, Ly, Lxs, Lys, Lxn, Lyn;
-
+        
+        int jobid;                      //<! for averaging
         SymmetrySectors syms; // structure holding symmetry sectors
         
         /// @brief 
