@@ -1,0 +1,1 @@
+-Lx 6 -Ly 6 -Nup -1 -Ndown 2 -tau 1.0 -mass 2 -masss 0.2 -massn 21 -th 10 -fun 1 -s -1 -ch 0 -num_of_points 50000 -b 1 -kx 0 -ky 0 -px 1 -py 1 -pd 1 -z 1 -l_steps 10 -l_bundle 1 -reortho 1 -l_maxiter 2000 -tol 1e-14 -seed 633459

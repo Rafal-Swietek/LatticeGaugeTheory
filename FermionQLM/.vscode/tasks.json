@@ -1,0 +1,43 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "C/C++: clang++ build active file",
+			"command": "/opt/homebrew/opt/llvm//bin/clang++",
+			"args": [
+				"-std=c++2b", "-stdlib=libc++",
+				"-Xpreprocessor", "-fopenmp",
+// 
+				"-I", "/opt/homebrew/opt/llvm/include",
+				"-L", "/opt/homebrew/opt/llvm/lib",
+    			"-Wl,-rpath,/opt/homebrew/opt/llvm/lib",
+// 
+				"-I", "/opt/homebrew/opt/libomp/include",
+				"-L", "/opt/homebrew/opt/libomp/lib",
+// 
+				"-I", "/opt/homebrew/opt/armadillo/include",
+				"-L", "/opt/homebrew/opt/armadillo/lib",
+				"${workspaceFolder}/*.cpp",
+				"-o",
+				"${workspaceFolder}/exec.o",
+				"-larmadillo", "-lsuperlu",
+				"-lpthread", "-lm", "-lhdf5",
+				"-fomit-frame-pointer", "-O3",
+				"-fdiagnostics-color=always", "-lomp",
+				"-DMY_MAC"
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"problemMatcher": [
+				"$clang"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"detail": "compiler: /opt/homebrew/opt/llvm//bin/clang++"
+		}
+	]
+}

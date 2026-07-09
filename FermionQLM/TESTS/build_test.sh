@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+/opt/homebrew/opt/llvm//bin/clang++ -std=c++2b -stdlib=libc++ -Xpreprocessor -fopenmp -I /opt/homebrew/opt/llvm/include -L /opt/homebrew/opt/llvm/lib -Wl,-rpath,/opt/homebrew/opt/llvm/lib -I /opt/homebrew/opt/libomp/include -L /opt/homebrew/opt/libomp/lib -I /opt/homebrew/opt/armadillo/include -L /opt/homebrew/opt/armadillo/lib test_lattice_generators.cpp -o test.o -larmadillo -lsuperlu -lpthread -lm -lhdf5 -fomit-frame-pointer -O3 -fdiagnostics-color=always -lomp -DMY_MAC
