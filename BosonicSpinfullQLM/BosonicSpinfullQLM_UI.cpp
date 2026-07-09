@@ -1383,7 +1383,11 @@ void ui::dimer_dynamics()
         init_state(index) = 1.0;
         std::cout << " - - - - - - finished setting up initial state in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
         start = std::chrono::system_clock::now();
-        arma::uvec idx = arma::find(DimerNumber.diag() == Ndimer);
+        arma::Col<int> DimerNumber_dummy(dim);
+        for(int k = 0; k < dim; k++)
+            DimerNumber_dummy(k) = int( DimerNumber(k, k) );
+            
+        arma::uvec idx = arma::find(DimerNumber_dummy == Ndimer);
         u64 idx_start = idx.front();
         u64 idx_stop  = idx.back();
         std::cout << " - - - - - - finished findinf initial states with fixed dimer number with start = " << idx_start << " and stop = " << idx_stop << " in : " << tim_s(start) << " s - - - - - - " << std::endl; // simulation end
