@@ -152,6 +152,8 @@ namespace BosonicSpinfullQLM_UI{
         void LiebLatticeStrip();
         
         void LiebLatticeRandomShape();
+
+        void spectral_form_factor_shape();
         // ----------------------------------- HELPER FUNCTIONS
 	    
         // virtual element_type
